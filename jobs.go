@@ -8,7 +8,7 @@ import (
 
 type jobType func() error
 
-// job - для заданий выполняющихся разное время
+// Jobs running different times
 func job() jobType {
 	return func() error {
 		if rand.Float64() > 0.65 {
@@ -19,7 +19,7 @@ func job() jobType {
 	}
 }
 
-//sliceJobs - наполнение слайса заданиями
+// Filling the slice with jobs
 func sliceJobs(numJobs int) []jobType {
 	var setJobs = []jobType{}
 	for i := 0; i < numJobs; i++ {
@@ -28,30 +28,30 @@ func sliceJobs(numJobs int) []jobType {
 	return setJobs
 }
 
-// handlerJobs - функция параллельного выполнение N заданий
+// Parallel execution of N jobs
 func handlerJobs(jobs []jobType, maxJobs int, maxErrors int) {
 	var count int
-	jobСhannel := make(chan interface{}, len(jobs)) // Канал выполенния заданий
-	errorsСhannel := make(chan error, maxErrors)    // Канал заданий с ошибкой
-	goroutines := make(chan struct{}, maxJobs)      // Канал ограничения горутин
+	jobChannel := make(chan interface{}, len(jobs)) // Job execution channel
+	errorsChannel := make(chan error, maxErrors)    // Channel with an error
+	goroutines := make(chan struct{}, maxJobs)      // Semaphore to limit
 
 	for _, j := range jobs {
-		func(j jobType) {
-			goroutines <- struct{}{}
-			if len(errorsСhannel) < maxErrors {
-				jobСhannel <- j() // Запись в канал выполненных заданий
-				if job() != nil {
-					errorsСhannel <- j() // Запись в канал заданий с ошибкой
+		goroutines <- struct{}{}
+		go func(j jobType) {
+			if len(errorsChannel) < maxErrors {
+				jobChannel <- j() // Writing completed jobs to the channel
+				if j() != nil {
+					errorsChannel <- j() // Writing jobs to the channel with an error
 				}
 			}
 			<-goroutines
 		}(j)
 	}
 
-	// Выход из функции
-	for range jobСhannel {
+	// Exit conditions from a function
+	for range jobChannel {
 		count++
-		if count == len(jobs) || len(errorsСhannel) == maxErrors {
+		if count == len(jobs) || len(errorsChannel) == maxErrors {
 			break
 		}
 	}
