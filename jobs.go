@@ -20,7 +20,7 @@ func job() jobType {
 }
 
 // Filling the slice with jobs
-func sliceJobs(numJobs int) []jobType {
+func makeSliceJobs(numJobs int) []jobType {
 	var setJobs = []jobType{}
 	for i := 0; i < numJobs; i++ {
 		setJobs = append(setJobs, job())
@@ -29,30 +29,39 @@ func sliceJobs(numJobs int) []jobType {
 }
 
 // Parallel execution of N jobs
-func handlerJobs(jobs []jobType, maxJobs int, maxErrors int) {
-	var count int
-	jobChannel := make(chan interface{}, len(jobs)) // Job execution channel
-	errorsChannel := make(chan error, maxErrors)    // Channel with an error
-	goroutines := make(chan struct{}, maxJobs)      // Semaphore to limit
+func handlerJobs(sliceJobs []jobType, maxJobs int, maxErrors int) int {
+	var countJobs, countErrors int
+	jobChannel := make(chan interface{}, len(sliceJobs)) // Job execution channel
+	errorsChannel := make(chan error, maxErrors)         // Channel with an error
+	goroutines := make(chan struct{}, maxJobs)           // Semaphore to limit
 
-	for _, j := range jobs {
-		goroutines <- struct{}{}
+	for _, j := range sliceJobs {
 		go func(j jobType) {
+			goroutines <- struct{}{}
 			if len(errorsChannel) < maxErrors {
-				jobChannel <- j() // Writing completed jobs to the channel
-				if j() != nil {
-					errorsChannel <- j() // Writing jobs to the channel with an error
-				}
+				process(j, jobChannel, errorsChannel)
 			}
 			<-goroutines
 		}(j)
 	}
 
-	// Exit conditions from a function
 	for range jobChannel {
-		count++
-		if count == len(jobs) || len(errorsChannel) == maxErrors {
+		countJobs++
+		if countJobs == len(sliceJobs) || len(errorsChannel) == maxErrors {
+			countErrors = len(errorsChannel)
 			break
 		}
+	}
+	return countErrors
+}
+
+// Job processing
+func process(j jobType, jobChannel chan<- interface{}, errorsChannel chan<- error) {
+
+	result := j()
+	jobChannel <- result // Writing completed jobs to the channel
+
+	if result != nil {
+		errorsChannel <- result // Writing jobs to the channel with an error
 	}
 }
